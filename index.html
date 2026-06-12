@@ -315,4 +315,456 @@ const GROUPS=[
   {group:"K",teams:["Portugal","RD Congo","Uzbequistão","Colômbia"],matches:[
     {id:"K1",r:1,home:"Portugal",away:"RD Congo",date:"17/Jun",time:"14h"},
     {id:"K2",r:1,home:"Uzbequistão",away:"Colômbia",date:"17/Jun",time:"23h"},
-    {id
+    {id:"K3",r:2,home:"Portugal",away:"Uzbequistão",date:"23/Jun",time:"14h"},
+    {id:"K4",r:2,home:"Colômbia",away:"RD Congo",date:"23/Jun",time:"23h"},
+    {id:"K5",r:3,home:"Colômbia",away:"Portugal",date:"27/Jun",time:"20h30"},
+    {id:"K6",r:3,home:"RD Congo",away:"Uzbequistão",date:"27/Jun",time:"20h30"},
+  ]},
+  {group:"L",teams:["Inglaterra","Croácia","Gana","Panamá"],matches:[
+    {id:"L1",r:1,home:"Inglaterra",away:"Croácia",date:"17/Jun",time:"17h"},
+    {id:"L2",r:1,home:"Gana",away:"Panamá",date:"17/Jun",time:"20h"},
+    {id:"L3",r:2,home:"Inglaterra",away:"Gana",date:"23/Jun",time:"17h"},
+    {id:"L4",r:2,home:"Panamá",away:"Croácia",date:"23/Jun",time:"20h"},
+    {id:"L5",r:3,home:"Panamá",away:"Inglaterra",date:"27/Jun",time:"18h"},
+    {id:"L6",r:3,home:"Croácia",away:"Gana",date:"27/Jun",time:"18h"},
+  ]},
+];
+
+const FLAGS={"México":"🇲🇽","África do Sul":"🇿🇦","Coreia do Sul":"🇰🇷","Rep. Tcheca":"🇨🇿","Canadá":"🇨🇦","Bósnia e Herz.":"🇧🇦","Catar":"🇶🇦","Suíça":"🇨🇭","Brasil":"🇧🇷","Marrocos":"🇲🇦","Haiti":"🇭🇹","Escócia":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Estados Unidos":"🇺🇸","Paraguai":"🇵🇾","Austrália":"🇦🇺","Turquia":"🇹🇷","Alemanha":"🇩🇪","Curaçao":"🇨🇼","Costa do Marfim":"🇨🇮","Equador":"🇪🇨","Holanda":"🇳🇱","Japão":"🇯🇵","Tunísia":"🇹🇳","Suécia":"🇸🇪","Bélgica":"🇧🇪","Egito":"🇪🇬","Irã":"🇮🇷","Nova Zelândia":"🇳🇿","Espanha":"🇪🇸","Cabo Verde":"🇨🇻","Arábia Saudita":"🇸🇦","Uruguai":"🇺🇾","França":"🇫🇷","Senegal":"🇸🇳","Noruega":"🇳🇴","Iraque":"🇮🇶","Argentina":"🇦🇷","Argélia":"🇩🇿","Áustria":"🇦🇹","Jordânia":"🇯🇴","Portugal":"🇵🇹","RD Congo":"🇨🇩","Uzbequistão":"🇺🇿","Colômbia":"🇨🇴","Inglaterra":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Croácia":"🇭🇷","Gana":"🇬🇭","Panamá":"🇵🇦"};
+
+const LOCKS={1:new Date("2026-06-12T16:00:00-03:00"),2:new Date("2026-06-18T13:00:00-03:00"),3:new Date("2026-06-24T16:00:00-03:00")};
+const LOCK_CLASS=new Date("2026-06-18T13:00:00-03:00"); // classificados travam no início da R2
+const classLocked=()=>new Date()>=LOCK_CLASS;
+const ALL=GROUPS.flatMap(g=>g.matches).filter(m=>m.r!==null);
+const OK=SCRIPT_URL!=="COLE_SUA_URL_AQUI";
+
+const LS_USER="bolao_user", LS_GUESSES="bolao_guesses", LS_CLASS="bolao_class";
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k))||null;}catch{return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+let S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false};
+
+// ── API via GET (evita CORS preflight) ────────────────────────────────────────
+async function api(params){
+  if(!OK) return {};
+  const qs=new URLSearchParams(params).toString();
+  const r=await fetch(SCRIPT_URL+"?"+qs);
+  return r.json();
+}
+
+function score(g,a){
+  if(!a||a.home===""||a.away==="") return null;
+  const gH=parseInt(g?.home),gA=parseInt(g?.away),aH=parseInt(a.home),aA=parseInt(a.away);
+  if(isNaN(gH)||isNaN(gA)) return 0;
+  if(gH===aH&&gA===aA) return 5;
+  const gR=gH>gA?1:gH<gA?-1:0,aR=aH>aA?1:aH<aA?-1:0,rOk=gR===aR,hOk=gH===aH,vOk=gA===aA;
+  if(rOk&&(hOk||vOk)) return 3;
+  if(rOk) return 2;
+  if(hOk||vOk) return 1;
+  return 0;
+}
+function locked(r){return new Date()>=LOCKS[r];}
+
+let toastT;
+function toast(msg,t="ok"){
+  const el=document.getElementById("toast");
+  el.textContent=msg; el.className="toast show "+t;
+  clearTimeout(toastT); toastT=setTimeout(()=>el.className="toast",4000);
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+async function doLogin(){
+  const name=document.getElementById("name-input").value.trim();
+  if(!name) return;
+  const btn=document.getElementById("login-btn");
+  btn.disabled=true; btn.textContent="Carregando...";
+  try{
+    if(OK){
+      const d=await api({action:"getGuesses",name});
+      S.guesses=d.guesses||{};
+    }
+    S.user=name;
+    lsSet(LS_USER,name);
+    lsSet(LS_GUESSES,S.guesses);
+    document.getElementById("screen-login").classList.add("hidden");
+    document.getElementById("screen-main").classList.remove("hidden");
+    document.getElementById("logout-btn").classList.remove("hidden");
+    renderAll();
+    if(OK) poll();
+  }catch(e){
+    S.user=name;
+    lsSet(LS_USER,name);
+    document.getElementById("screen-login").classList.add("hidden");
+    document.getElementById("screen-main").classList.remove("hidden");
+    document.getElementById("logout-btn").classList.remove("hidden");
+    renderAll();
+  }
+  btn.disabled=false; btn.textContent="Entrar";
+}
+
+function logout(){
+  lsSet(LS_USER,null); lsSet(LS_GUESSES,null); lsSet(LS_CLASS,null);
+  S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false};
+  document.getElementById("screen-login").classList.remove("hidden");
+  document.getElementById("screen-main").classList.add("hidden");
+  document.getElementById("logout-btn").classList.add("hidden");
+  document.getElementById("name-input").value="";
+  renderPlist();
+}
+
+// ── POLL ──────────────────────────────────────────────────────────────────────
+async function poll(){
+  if(!OK) return;
+  try{
+    const d=await api({action:"getPublicData"});
+    if(d.results) S.results=d.results;
+    if(d.participants) S.participants=d.participants;
+    renderRanking(); renderResults(); renderProgress(); renderMatches();
+    renderPlist();
+  }catch(e){}
+  setTimeout(poll,30000);
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function switchTab(id,btn){
+  ["palpites","class","ranking","jogos"].forEach(t=>document.getElementById("tab-"+t).classList.toggle("hidden",t!==id));
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
+function renderAll(){renderRoundTabs();renderMatches();renderProgress();renderRanking();renderResults();renderClassGuesses();renderPlist();}
+
+function renderPlist(){
+  const el=document.getElementById("plist"),sec=document.getElementById("plist-section");
+  if(!S.participants.length){sec.classList.add("hidden");return;}
+  sec.classList.remove("hidden");
+  el.innerHTML=S.participants.map(p=>`<div class="pitem" onclick="document.getElementById('name-input').value='${p.name.replace(/'/g,"\\'")}'""><span class="pitem-name">${FLAGS[p.name]?FLAGS[p.name]+" ":""}${p.name}</span><span class="pitem-info">${Object.keys(p.guesses||{}).length} palpites</span></div>`).join("");
+}
+
+function renderRoundTabs(){
+  document.getElementById("round-tabs").innerHTML=[1,2,3].map(r=>{
+    const lk=locked(r),rm=ALL.filter(m=>m.r===r),sv=rm.filter(m=>S.guesses[m.id]?.home!==""&&S.guesses[m.id]?.home!==undefined).length;
+    return`<button class="round-btn ${S.round===r?"active":""} ${lk?"locked":""}" onclick="setRound(${r})"><span class="rlabel">Rodada ${r}</span><span class="round-meta">${lk?"🔒":`${sv}/${rm.length}`}</span></button>`;
+  }).join("");
+}
+
+function setRound(r){
+  S.round=r; renderRoundTabs(); renderMatches(); renderProgress();
+  document.getElementById("locked-banner").classList.toggle("hidden",!locked(r));
+  document.getElementById("save-section").classList.toggle("hidden",locked(r));
+}
+
+function renderProgress(){
+  const r=S.round,lk=locked(r);
+  document.getElementById("progress-wrap").classList.toggle("hidden",lk);
+  if(lk) return;
+  const rm=ALL.filter(m=>m.r===r);
+  const f=rm.filter(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="").length;
+  document.getElementById("progress-name").textContent=`Rodada ${r} — ${S.user}`;
+  document.getElementById("progress-count").textContent=`${f}/${rm.length}`;
+  document.getElementById("progress-fill").style.width=`${(f/rm.length)*100}%`;
+  document.getElementById("save-btn").textContent=f<rm.length?`Faltam ${rm.length-f} palpites`:`💾 Salvar Rodada ${r}`;
+}
+
+function renderMatches(){
+  const r=S.round,lk=locked(r);
+  let html="";
+  GROUPS.filter(g=>!(g.excludeRound1 && r===1)).forEach(g=>{
+    const gm=g.matches.filter(m=>m.r===r);
+    if(!gm.length) return;
+    html+=`<div class="group-block"><div class="group-hdr"><div class="group-badge">${g.group}</div><span class="group-name">Grupo ${g.group} · ${g.teams.join(" · ")}</span></div>`;
+    gm.forEach(m=>{
+      const v=S.guesses[m.id]||{},res=S.results[m.id],pts=res?score(v,res):null;
+      const hv=v.home??"",av=v.away??"";
+      let rr="";
+      if(res&&res.home!==""){
+        const pc=pts!==null?`pts-${pts}`:"",pl=pts===5?"🎯":pts>=2?"✅":pts===1?"〽️":"❌";
+        rr=`<div class="result-row"><span class="result-actual">Resultado: ${res.home}×${res.away}</span>${pts!==null?`<span class="pts-badge ${pc}">${pl} ${pts} pt${pts!==1?"s":""}</span>`:""}</div>`;
+      }
+      html+=`<div class="match-card ${res&&res.home!==""?"done":""}">
+        <div class="match-meta">${m.date} · ${m.time} (Brasília)</div>
+        <div class="match-row">
+          <div class="team"><span class="flag">${FLAGS[m.home]||"🏳"}</span><span class="tname">${m.home}</span></div>
+          <div class="score-pair">
+            <input class="score-inp ${hv!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${hv}" ${lk?"disabled":""} oninput="setG('${m.id}','home',this.value)" onchange="renderProgress()">
+            <span class="score-sep">×</span>
+            <input class="score-inp ${av!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${av}" ${lk?"disabled":""} oninput="setG('${m.id}','away',this.value)" onchange="renderProgress()">
+          </div>
+          <div class="team team-away"><span class="tname">${m.away}</span><span class="flag">${FLAGS[m.away]||"🏳"}</span></div>
+        </div>${rr}</div>`;
+    });
+    html+="</div>";
+  });
+  document.getElementById("matches-list").innerHTML=html;
+  document.getElementById("locked-banner").classList.toggle("hidden",!lk);
+  document.getElementById("save-section").classList.toggle("hidden",lk);
+}
+
+function setG(id,side,val){
+  if(!S.guesses[id]) S.guesses[id]={};
+  S.guesses[id][side]=val.replace(/\D/g,"").slice(0,2);
+}
+
+async function saveRound(){
+  const r=S.round,rm=ALL.filter(m=>m.r===r);
+  const ok=rm.every(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="");
+  if(!ok){toast(`Preencha todos os ${rm.length} jogos antes de salvar.`,"err");return;}
+  const btn=document.getElementById("save-btn");
+  btn.disabled=true; btn.textContent="Salvando...";
+  try{
+    if(OK){
+      const rg={};
+      rm.forEach(m=>rg[m.id]=S.guesses[m.id]);
+      await api({action:"saveGuesses",name:S.user,guesses:JSON.stringify(rg),round:r});
+    }
+    lsSet(LS_GUESSES,S.guesses);
+    toast(`Rodada ${r} salva! 🔒`,"ok");
+    renderRoundTabs();
+  }catch(e){toast("Erro ao salvar. Tente novamente.","err");}
+  btn.disabled=false; renderProgress();
+}
+
+function renderRanking(){
+  const ranking=S.participants.map(p=>{
+    let pts=0,exact=0,res=0,partial=0,played=0;
+    ALL.forEach(m=>{const s=score(p.guesses?.[m.id],S.results[m.id]);if(s===null)return;played++;pts+=s;if(s===5)exact++;else if(s===3)res++;else if(s===1)partial++;});
+    return{name:p.name,pts,exact,res,partial,played};
+  }).sort((a,b)=>b.pts-a.pts||b.exact-a.exact);
+  const med=["🥇","🥈","🥉"];
+  if(!ranking.length){document.getElementById("rank-list").innerHTML=`<div class="empty"><div style="font-size:40px;margin-bottom:12px">📊</div><p>Nenhum participante ainda.</p></div>`;return;}
+  document.getElementById("rank-list").innerHTML=ranking.map((p,i)=>{
+    const pc=i===0?"rp-1":i===1?"rp-2":i===2?"rp-3":"rp-n";
+    const cc=i===0?"rank-1":i===1?"rank-2":i===2?"rank-3":"";
+    const viewBtn=`<button class="view-btn" onclick="viewParticipant('${p.name.replace(/'/g,"\\'")}')">👁 Ver palpites</button>`;
+    return`<div class="rank-card ${cc} ${p.name===S.user?"rank-me":""}"><div class="rank-pos ${pc}">${i<3?med[i]:i+1}</div><div class="rank-info"><div class="rank-name">${FLAGS[p.name]?FLAGS[p.name]+" ":""}${p.name}${p.name===S.user?`<span class="you-tag">você</span>`:""}</div><div class="rank-detail">🎯 ${p.exact} · ✅ ${p.res} · 〽️ ${p.partial} · ${p.played} jogos</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><div class="rank-pts"><div class="rank-pts-val">${p.pts}</div><div class="rank-pts-lbl">pts</div></div>${viewBtn}</div></div>`;
+  }).join("");
+}
+
+function renderClassGuesses(){
+  const lk=classLocked();
+  document.getElementById("class-lock-banner").classList.toggle("hidden",!lk);
+  document.getElementById("class-info-banner").classList.toggle("hidden",lk);
+  const saveSection=document.getElementById("class-save-section");
+  if(saveSection) saveSection.classList.toggle("hidden",lk);
+  let html="";
+  GROUPS.forEach(g=>{
+    const cg=S.classGuesses[g.group]||{};
+    const teams=g.teams;
+    const opts=teams.map(t=>`<option value="${t}" ${cg.first===t?"selected":""}>${FLAGS[t]||""} ${t}</option>`).join("");
+    const opts2=teams.map(t=>`<option value="${t}" ${cg.second===t?"selected":""}>${FLAGS[t]||""} ${t}</option>`).join("");
+    const res=S.results;
+    // compute actual classified if all group matches done
+    let actualFirst="",actualSecond="";
+    const pts_={}; teams.forEach(t=>pts_[t]={pts:0,gd:0,gf:0});
+    const gDone=g.matches.filter(m=>m.r!==null&&res[m.id]&&res[m.id].home!=="");
+    const total=g.matches.filter(m=>m.r!==null).length;
+    if(gDone.length===total&&total>0){
+      gDone.forEach(m=>{
+        const h=parseInt(res[m.id].home),a=parseInt(res[m.id].away);
+        if(h>a){pts_[m.home].pts+=3;}else if(h===a){pts_[m.home].pts+=1;pts_[m.away].pts+=1;}else{pts_[m.away].pts+=3;}
+        pts_[m.home].gf+=h;pts_[m.home].gd+=h-a;
+        pts_[m.away].gf+=a;pts_[m.away].gd+=a-h;
+      });
+      const sorted=teams.slice().sort((a,b)=>pts_[b].pts-pts_[a].pts||pts_[b].gd-pts_[a].gd||pts_[b].gf-pts_[a].gf);
+      actualFirst=sorted[0];actualSecond=sorted[1];
+    }
+    // score badge
+    let badge="";
+    if(actualFirst&&cg.first&&cg.second){
+      let p=0;
+      if(cg.first===actualFirst&&cg.second===actualSecond) p=6;
+      else if(cg.first===actualFirst||cg.second===actualSecond||(cg.first===actualSecond&&cg.second===actualFirst)) p=(cg.first===actualSecond&&cg.second===actualFirst)?3:1;
+      // refine: both correct wrong order=3, one correct=1
+      if(cg.first===actualFirst&&cg.second===actualSecond) p=6;
+      else if(cg.first===actualSecond&&cg.second===actualFirst) p=3;
+      else if(cg.first===actualFirst||cg.second===actualSecond||cg.first===actualSecond||cg.second===actualFirst) p=1;
+      else p=0;
+      const cl=p===6?"pts-5":p===3?"pts-3":p===1?"pts-2":"pts-0";
+      const ic=p===6?"🎯":p===3?"✅":p===1?"〽️":"❌";
+      badge=`<span class="pts-badge ${cl}">${ic} ${p} pts</span>`;
+    }
+    html+=`<div class="match-card ${actualFirst?"done":""}">
+      <div class="group-hdr" style="margin-bottom:10px">
+        <div class="group-badge">${g.group}</div>
+        <span class="group-name">Grupo ${g.group}</span>
+        <span style="font-size:11px;color:var(--dim);margin-left:auto">${g.teams.map(t=>(FLAGS[t]||"")+t).join(" · ")}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-size:11px;color:var(--gold);font-weight:700;margin-bottom:6px">🥇 1º lugar</div>
+          <select class="class-select" ${lk?"disabled":""} onchange="setClass('${g.group}','first',this.value)">
+            <option value="">— selecione —</option>${opts}
+          </select>
+          ${actualFirst?`<div style="font-size:11px;color:var(--dim);margin-top:4px">Real: ${FLAGS[actualFirst]||""} ${actualFirst}</div>`:""}
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--dim);font-weight:700;margin-bottom:6px">🥈 2º lugar</div>
+          <select class="class-select" ${lk?"disabled":""} onchange="setClass('${g.group}','second',this.value)">
+            <option value="">— selecione —</option>${opts2}
+          </select>
+          ${actualSecond?`<div style="font-size:11px;color:var(--dim);margin-top:4px">Real: ${FLAGS[actualSecond]||""} ${actualSecond}</div>`:""}
+        </div>
+      </div>
+      ${badge?`<div class="result-row" style="margin-top:10px"><span style="font-size:11px;color:var(--dim)">Pontuação classificados</span>${badge}</div>`:""}
+    </div>`;
+  });
+  document.getElementById("class-list").innerHTML=html;
+}
+
+function setClass(group,pos,val){
+  if(!S.classGuesses[group]) S.classGuesses[group]={};
+  S.classGuesses[group][pos]=val;
+}
+
+async function saveClassGuesses(){
+  const btn=document.getElementById("class-save-btn");
+  btn.disabled=true; btn.textContent="Salvando...";
+  try{
+    if(OK) await api({action:"saveClassGuesses",name:S.user,classGuesses:JSON.stringify(S.classGuesses)});
+    lsSet(LS_CLASS,S.classGuesses);
+    toast("Classificados salvos! 🏅","ok");
+  }catch(e){toast("Erro ao salvar.","err");}
+  btn.disabled=false; btn.textContent="💾 Salvar Classificados";
+}
+
+function closeModal(e){
+  if(e.target===document.getElementById("modal-overlay"))
+    document.getElementById("modal-overlay").classList.add("hidden");
+}
+
+function viewParticipant(name){
+  const p=S.participants.find(x=>x.name===name);
+  if(!p){toast("Participante não encontrado.","err");return;}
+  document.getElementById("modal-title").textContent=`Palpites de ${name}`;
+  let html="";
+  [1,2,3].forEach(r=>{
+    const lk=locked(r);
+    const rm=ALL.filter(m=>m.r===r);
+    html+=`<div class="round-section-hdr">Rodada ${r} ${lk?"🔒":"🟢 (não travada)"}</div>`;
+    if(!lk){
+      html+=`<div class="match-pts-row" style="color:var(--dim);font-style:italic;background:transparent;border:1px solid var(--border)">🔒 Palpites visíveis apenas após o início da rodada</div>`;
+    } else {
+      GROUPS.filter(g=>!(g.excludeRound1&&r===1)).forEach(g=>{
+        g.matches.filter(m=>m.r===r).forEach(m=>{
+          const g_=p.guesses?.[m.id];
+          const res=S.results[m.id];
+          const pts=res?score(g_,res):null;
+          const hv=g_?.home??"-", av=g_?.away??"-";
+          const rv=res&&res.home!==""?`${res.home}×${res.away}`:"—";
+          const pc=pts!==null?`pts-${pts}`:"";
+          const pl=pts===5?"🎯":pts===3?"✅":pts===2?"✅":pts===1?"〽️":pts===0?"❌":"";
+          const badge=pts!==null?`<span class="pts-badge ${pc} match-pts-badge">${pl} ${pts}pts</span>`:"<span style='color:var(--dim);font-size:11px'>sem resultado</span>";
+          html+=`<div class="match-pts-row">
+            <div>
+              <div class="match-pts-teams">${FLAGS[m.home]||"🏳"} ${m.home} × ${m.away} ${FLAGS[m.away]||"🏳"}</div>
+              <div class="match-pts-result">Resultado: ${rv}</div>
+            </div>
+            <div style="text-align:right">
+              <div class="match-pts-guesses">${hv} × ${av}</div>
+              ${badge}
+            </div>
+          </div>`;
+        });
+      });
+    }
+  });
+  // classificados
+  html+=`<div class="round-section-hdr">🏅 Classificados ${classLocked()?"🔒":"🟢 (não travado)"}</div>`;
+  if(!classLocked()){
+    html+=`<div class="match-pts-row" style="color:var(--dim);font-style:italic;background:transparent;border:1px solid var(--border)">🔒 Visível após 18/Jun às 13h</div>`;
+  } else {
+    const cg=p.classGuesses||{};
+    GROUPS.forEach(g=>{
+      const c=cg[g.group]||{};
+      const f=c.first||"—", s=c.second||"—";
+      html+=`<div class="match-pts-row">
+        <div class="match-pts-teams">Grupo ${g.group}</div>
+        <div style="text-align:right;font-size:12px">
+          🥇 ${FLAGS[f]||""} ${f}<br>🥈 ${FLAGS[s]||""} ${s}
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById("modal-body").innerHTML=html;
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+
+function toggleAdmin(){
+  const cb=document.getElementById("admin-check");
+  if(cb.checked){
+    const pw=prompt("Digite a senha de administrador:");
+    if(pw!==ADMIN_PASS){cb.checked=false;toast("Senha incorreta.","err");return;}
+  }
+  S.admin=cb.checked;renderResults();
+}
+
+function renderResults(){
+  let html="";
+  [1,2,3].forEach(r=>{
+    html+=`<div class="round-block"><div class="round-label">Rodada ${r} ${locked(r)?"🔒":"🟢"}</div>`;
+    GROUPS.forEach(g=>{
+      g.matches.filter(m=>m.r===r).forEach(m=>{
+        const res=S.results[m.id]||{},done=res.home!==undefined&&res.home!=="";
+        html+=`<div class="match-card ${done?"done":""}">
+          <div class="match-meta">${m.date} · ${m.time} · Grupo ${g.group}</div>
+          <div class="match-row">
+            <div class="team"><span class="flag">${FLAGS[m.home]||"🏳"}</span><span class="tname">${m.home}</span></div>
+            <div class="score-pair">
+              <input class="score-inp ${done?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${res.home??""}" ${!S.admin?"disabled":""} data-mid="${m.id}" data-side="home" onblur="saveRes(this)">
+              <span class="score-sep">×</span>
+              <input class="score-inp ${done?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${res.away??""}" ${!S.admin?"disabled":""} data-mid="${m.id}" data-side="away" onblur="saveRes(this)">
+            </div>
+            <div class="team team-away"><span class="tname">${m.away}</span><span class="flag">${FLAGS[m.away]||"🏳"}</span></div>
+          </div></div>`;
+      });
+    });
+    html+="</div>";
+  });
+  document.getElementById("results-list").innerHTML=html;
+}
+
+async function saveRes(el){
+  if(!S.admin||!OK) return;
+  const mid=el.dataset.mid;
+  const inputs=document.querySelectorAll(`[data-mid="${mid}"]`);
+  const h=inputs[0].value,a=inputs[1].value;
+  if(h===""||a==="") return;
+  S.results[mid]={home:h,away:a};
+  try{await api({action:"saveResult",matchId:mid,home:h,away:a});}
+  catch(e){toast("Erro ao salvar resultado","err");return;}
+  renderMatches();renderRanking();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async()=>{
+  // Auto-login se houver usuário salvo
+  const savedUser=lsGet(LS_USER);
+  if(savedUser){
+    S.guesses=lsGet(LS_GUESSES)||{};
+    S.classGuesses=lsGet(LS_CLASS)||{};
+    S.user=savedUser;
+    try{
+      if(OK){
+        const d=await api({action:"getGuesses",name:savedUser});
+        if(d.guesses) S.guesses={...S.guesses,...d.guesses};
+        if(d.classGuesses) S.classGuesses={...S.classGuesses,...d.classGuesses};
+      }
+    }catch(e){}
+    document.getElementById("screen-login").classList.add("hidden");
+    document.getElementById("screen-main").classList.remove("hidden");
+    document.getElementById("logout-btn").classList.remove("hidden");
+    renderAll();
+    if(OK) poll();
+    return;
+  }
+  if(OK){
+    try{
+      const d=await api({action:"getPublicData"});
+      if(d.results) S.results=d.results;
+      if(d.participants) S.participants=d.participants;
+      renderPlist();
+    }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
