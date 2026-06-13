@@ -150,6 +150,7 @@ h1 span{color:var(--gold)}
         <div class="login-icon">⚽</div>
         <h2>Bem-vindo ao Bolão!</h2>
         <p>Digite seu nome para acessar seus palpites</p>
+        <div id="entry-status" style="margin-bottom:14px"></div>
         <input class="text-input" id="name-input" placeholder="Seu nome" maxlength="30" onkeydown="if(event.key==='Enter')doLogin()">
         <button class="btn-gold" id="login-btn" onclick="doLogin()">Entrar</button>
       </div>
@@ -338,10 +339,10 @@ const classLocked=()=>new Date()>=LOCK_CLASS;
 const ALL=GROUPS.flatMap(g=>g.matches).filter(m=>m.r!==null);
 const OK=SCRIPT_URL!=="COLE_SUA_URL_AQUI";
 
-const LS_USER="bolao_user", LS_GUESSES="bolao_guesses", LS_CLASS="bolao_class";
+const LS_USER="bolao_user", LS_GUESSES="bolao_guesses", LS_CLASS="bolao_class", LS_REG="bolao_reg";
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k))||null;}catch{return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
-let S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false};
+let S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null};
 
 // ── API via GET (evita CORS preflight) ────────────────────────────────────────
 async function api(params){
@@ -364,6 +365,59 @@ function score(g,a){
 }
 function locked(r){return new Date()>=LOCKS[r];}
 
+// Data/hora de início de cada jogo (Brasília UTC-3)
+const MATCH_DATES={
+"A1":new Date("2026-06-11T16:00:00-03:00"),"A2":new Date("2026-06-11T23:00:00-03:00"),
+"A3":new Date("2026-06-18T13:00:00-03:00"),"A4":new Date("2026-06-18T22:00:00-03:00"),
+"A5":new Date("2026-06-24T22:00:00-03:00"),"A6":new Date("2026-06-24T22:00:00-03:00"),
+"B1":new Date("2026-06-12T16:00:00-03:00"),"B2":new Date("2026-06-13T16:00:00-03:00"),
+"B3":new Date("2026-06-18T16:00:00-03:00"),"B4":new Date("2026-06-18T19:00:00-03:00"),
+"B5":new Date("2026-06-24T16:00:00-03:00"),"B6":new Date("2026-06-24T16:00:00-03:00"),
+"C1":new Date("2026-06-13T19:00:00-03:00"),"C2":new Date("2026-06-13T22:00:00-03:00"),
+"C3":new Date("2026-06-19T19:00:00-03:00"),"C4":new Date("2026-06-19T22:00:00-03:00"),
+"C5":new Date("2026-06-24T19:00:00-03:00"),"C6":new Date("2026-06-24T19:00:00-03:00"),
+"D1":new Date("2026-06-12T22:00:00-03:00"),"D2":new Date("2026-06-13T01:00:00-03:00"),
+"D3":new Date("2026-06-19T01:00:00-03:00"),"D4":new Date("2026-06-19T16:00:00-03:00"),
+"D5":new Date("2026-06-25T23:00:00-03:00"),"D6":new Date("2026-06-25T23:00:00-03:00"),
+"E1":new Date("2026-06-14T14:00:00-03:00"),"E2":new Date("2026-06-14T20:00:00-03:00"),
+"E3":new Date("2026-06-20T17:00:00-03:00"),"E4":new Date("2026-06-20T21:00:00-03:00"),
+"E5":new Date("2026-06-25T17:00:00-03:00"),"E6":new Date("2026-06-25T17:00:00-03:00"),
+"F1":new Date("2026-06-14T17:00:00-03:00"),"F2":new Date("2026-06-14T23:00:00-03:00"),
+"F3":new Date("2026-06-20T14:00:00-03:00"),"F4":new Date("2026-06-21T01:00:00-03:00"),
+"F5":new Date("2026-06-25T20:00:00-03:00"),"F6":new Date("2026-06-25T20:00:00-03:00"),
+"G1":new Date("2026-06-15T16:00:00-03:00"),"G2":new Date("2026-06-15T22:00:00-03:00"),
+"G3":new Date("2026-06-21T16:00:00-03:00"),"G4":new Date("2026-06-21T22:00:00-03:00"),
+"G5":new Date("2026-06-27T00:00:00-03:00"),"G6":new Date("2026-06-27T00:00:00-03:00"),
+"H1":new Date("2026-06-15T13:00:00-03:00"),"H2":new Date("2026-06-15T19:00:00-03:00"),
+"H3":new Date("2026-06-21T13:00:00-03:00"),"H4":new Date("2026-06-21T19:00:00-03:00"),
+"H5":new Date("2026-06-26T21:00:00-03:00"),"H6":new Date("2026-06-26T21:00:00-03:00"),
+"I1":new Date("2026-06-16T16:00:00-03:00"),"I2":new Date("2026-06-16T19:00:00-03:00"),
+"I3":new Date("2026-06-22T18:00:00-03:00"),"I4":new Date("2026-06-22T21:00:00-03:00"),
+"I5":new Date("2026-06-26T16:00:00-03:00"),"I6":new Date("2026-06-26T16:00:00-03:00"),
+"J1":new Date("2026-06-16T14:00:00-03:00"),"J2":new Date("2026-06-17T01:00:00-03:00"),
+"J3":new Date("2026-06-22T14:00:00-03:00"),"J4":new Date("2026-06-23T00:00:00-03:00"),
+"J5":new Date("2026-06-27T23:00:00-03:00"),"J6":new Date("2026-06-27T23:00:00-03:00"),
+"K1":new Date("2026-06-17T14:00:00-03:00"),"K2":new Date("2026-06-17T23:00:00-03:00"),
+"K3":new Date("2026-06-23T14:00:00-03:00"),"K4":new Date("2026-06-23T23:00:00-03:00"),
+"K5":new Date("2026-06-27T20:30:00-03:00"),"K6":new Date("2026-06-27T20:30:00-03:00"),
+"L1":new Date("2026-06-17T17:00:00-03:00"),"L2":new Date("2026-06-17T20:00:00-03:00"),
+"L3":new Date("2026-06-23T17:00:00-03:00"),"L4":new Date("2026-06-23T20:00:00-03:00"),
+"L5":new Date("2026-06-27T18:00:00-03:00"),"L6":new Date("2026-06-27T18:00:00-03:00"),
+};
+
+// Retorna true se este jogo está bloqueado para este participante
+// Jogo bloqueado se: (a) jogo já começou, OU (b) usuário se cadastrou depois do início do jogo
+function matchLocked(matchId){
+  const matchStart = MATCH_DATES[matchId];
+  if(!matchStart) return false;
+  const now = new Date();
+  if(now >= matchStart) return true; // jogo já começou para todo mundo
+  // Para novos participantes: bloqueia jogos que já tinham começado no momento do cadastro
+  const registeredAt = S.registeredAt ? new Date(S.registeredAt) : null;
+  if(registeredAt && registeredAt >= matchStart) return true;
+  return false;
+}
+
 let toastT;
 function toast(msg,t="ok"){
   const el=document.getElementById("toast");
@@ -381,8 +435,17 @@ async function doLogin(){
     if(OK){
       const d=await api({action:"getGuesses",name});
       S.guesses=d.guesses||{};
+      // Se usuário novo (sem palpites), registra data de entrada
+      const isNew=!d.guesses||Object.keys(d.guesses).length===0;
+      if(isNew) await api({action:"registerEntry",name,registeredAt:new Date().toISOString()});
     }
     S.user=name;
+    // Registra data de entrada (só na primeira vez)
+    if(!S.registeredAt){
+      const savedReg=lsGet(LS_REG);
+      S.registeredAt = savedReg || new Date().toISOString();
+      lsSet(LS_REG, S.registeredAt);
+    }
     lsSet(LS_USER,name);
     lsSet(LS_GUESSES,S.guesses);
     document.getElementById("screen-login").classList.add("hidden");
@@ -403,7 +466,8 @@ async function doLogin(){
 
 function logout(){
   lsSet(LS_USER,null); lsSet(LS_GUESSES,null); lsSet(LS_CLASS,null);
-  S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false};
+  S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null};
+  lsSet(LS_REG,null);
   document.getElementById("screen-login").classList.remove("hidden");
   document.getElementById("screen-main").classList.add("hidden");
   document.getElementById("logout-btn").classList.add("hidden");
@@ -431,7 +495,7 @@ function switchTab(id,btn){
   btn.classList.add("active");
 }
 
-function renderAll(){renderRoundTabs();renderMatches();renderProgress();renderRanking();renderResults();renderClassGuesses();renderPlist();}
+function renderAll(){renderRoundTabs();renderMatches();renderProgress();renderRanking();renderResults();renderClassGuesses();renderPlist();renderEntryStatus();}
 
 function renderPlist(){
   const el=document.getElementById("plist"),sec=document.getElementById("plist-section");
@@ -442,8 +506,10 @@ function renderPlist(){
 
 function renderRoundTabs(){
   document.getElementById("round-tabs").innerHTML=[1,2,3].map(r=>{
-    const lk=locked(r),rm=ALL.filter(m=>m.r===r),sv=rm.filter(m=>S.guesses[m.id]?.home!==""&&S.guesses[m.id]?.home!==undefined).length;
-    return`<button class="round-btn ${S.round===r?"active":""} ${lk?"locked":""}" onclick="setRound(${r})"><span class="rlabel">Rodada ${r}</span><span class="round-meta">${lk?"🔒":`${sv}/${rm.length}`}</span></button>`;
+    const lk=locked(r),rm=ALL.filter(m=>m.r===r);
+    const avail=rm.filter(m=>!matchLocked(m.id));
+    const sv=avail.filter(m=>S.guesses[m.id]?.home!==""&&S.guesses[m.id]?.home!==undefined).length;
+    return`<button class="round-btn ${S.round===r?"active":""} ${lk?"locked":""}" onclick="setRound(${r})"><span class="rlabel">Rodada ${r}</span><span class="round-meta">${lk?"🔒":`${sv}/${avail.length}`}</span></button>`;
   }).join("");
 }
 
@@ -475,28 +541,31 @@ function renderMatches(){
     gm.forEach(m=>{
       const v=S.guesses[m.id]||{},res=S.results[m.id],pts=res?score(v,res):null;
       const hv=v.home??"",av=v.away??"";
+      const mlk=matchLocked(m.id);
       let rr="";
       if(res&&res.home!==""){
         const pc=pts!==null?`pts-${pts}`:"",pl=pts===5?"🎯":pts>=2?"✅":pts===1?"〽️":"❌";
         rr=`<div class="result-row"><span class="result-actual">Resultado: ${res.home}×${res.away}</span>${pts!==null?`<span class="pts-badge ${pc}">${pl} ${pts} pt${pts!==1?"s":""}</span>`:""}</div>`;
       }
-      html+=`<div class="match-card ${res&&res.home!==""?"done":""}">
+      const lateBadge=mlk&&new Date()<MATCH_DATES[m.id]?"":(mlk&&S.registeredAt&&new Date(S.registeredAt)>=MATCH_DATES[m.id]?`<div style="font-size:10px;color:var(--orange);margin-top:4px">🔒 Jogo já havia iniciado no seu cadastro</div>`:"");
+      html+=`<div class="match-card ${res&&res.home!==""?"done":""} ${mlk?"match-locked":""}">
         <div class="match-meta">${m.date} · ${m.time} (Brasília)</div>
         <div class="match-row">
           <div class="team"><span class="flag">${FLAGS[m.home]||"🏳"}</span><span class="tname">${m.home}</span></div>
           <div class="score-pair">
-            <input class="score-inp ${hv!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${hv}" ${lk?"disabled":""} oninput="setG('${m.id}','home',this.value)" onchange="renderProgress()">
+            <input class="score-inp ${hv!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${hv}" ${mlk?"disabled":""} oninput="setG('${m.id}','home',this.value)" onchange="renderProgress()">
             <span class="score-sep">×</span>
-            <input class="score-inp ${av!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${av}" ${lk?"disabled":""} oninput="setG('${m.id}','away',this.value)" onchange="renderProgress()">
+            <input class="score-inp ${av!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${av}" ${mlk?"disabled":""} oninput="setG('${m.id}','away',this.value)" onchange="renderProgress()">
           </div>
           <div class="team team-away"><span class="tname">${m.away}</span><span class="flag">${FLAGS[m.away]||"🏳"}</span></div>
-        </div>${rr}</div>`;
+        </div>${lateBadge}${rr}</div>`;
     });
     html+="</div>";
   });
   document.getElementById("matches-list").innerHTML=html;
-  document.getElementById("locked-banner").classList.toggle("hidden",!lk);
-  document.getElementById("save-section").classList.toggle("hidden",lk);
+  const anyAvail=ALL.filter(m=>m.r===r).some(m=>!matchLocked(m.id));
+  document.getElementById("locked-banner").classList.toggle("hidden",anyAvail||!lk);
+  document.getElementById("save-section").classList.toggle("hidden",!anyAvail);
 }
 
 function setG(id,side,val){
@@ -688,6 +757,35 @@ function viewParticipant(name){
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
+function renderEntryStatus(){
+  const el=document.getElementById("entry-status");
+  if(!el) return;
+  const r1=new Date()>=LOCKS[1], r2=new Date()>=LOCKS[2], r3=new Date()>=LOCKS[3];
+  const classLk=new Date()>=LOCK_CLASS;
+  if(!r1&&!classLk){
+    el.innerHTML=`<div style="background:#0D2A1A;border:1px solid var(--green);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--green)">
+      ✅ Todas as rodadas abertas para palpites
+    </div>`;
+  } else {
+    const locked=[];
+    if(r1) locked.push("Rodada 1");
+    if(r2) locked.push("Rodada 2");
+    if(r3) locked.push("Rodada 3");
+    if(classLk) locked.push("Classificados");
+    const open=[];
+    if(!r1) open.push("Rodada 1");
+    if(!r2) open.push("Rodada 2");
+    if(!r3) open.push("Rodada 3");
+    if(!classLk) open.push("Classificados");
+    el.innerHTML=`<div style="background:#1A0E00;border:1px solid var(--orange);border-radius:8px;padding:10px 12px;font-size:12px;color:#FFB07A;text-align:left">
+      <div style="font-weight:700;margin-bottom:4px">⚠️ Entrada após início do bolão</div>
+      ${locked.length?`<div>🔒 Já encerradas: <strong>${locked.join(", ")}</strong></div>`:""}
+      ${open.length?`<div>✅ Ainda abertas: <strong>${open.join(", ")}</strong></div>`:`<div style="color:var(--red)">❌ Todas as rodadas encerradas</div>`}
+      <div style="margin-top:4px;opacity:.8">Você concorre ao prêmio mas parte com desvantagem de pontuação.</div>
+    </div>`;
+  }
+}
+
 function toggleAdmin(){
   const cb=document.getElementById("admin-check");
   if(cb.checked){
@@ -741,6 +839,7 @@ async function saveRes(el){
   if(savedUser){
     S.guesses=lsGet(LS_GUESSES)||{};
     S.classGuesses=lsGet(LS_CLASS)||{};
+    S.registeredAt=lsGet(LS_REG)||new Date().toISOString();
     S.user=savedUser;
     try{
       if(OK){
