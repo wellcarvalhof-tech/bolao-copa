@@ -546,11 +546,12 @@ function renderProgress(){
   document.getElementById("progress-wrap").classList.toggle("hidden",!_avail);
   if(!_avail) return;
   const rm=ALL.filter(m=>m.r===r);
-  const f=rm.filter(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="").length;
+  const avail=rm.filter(m=>!matchLocked(m.id));
+  const f=avail.filter(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="").length;
   document.getElementById("progress-name").textContent=`Rodada ${r} — ${S.user}`;
-  document.getElementById("progress-count").textContent=`${f}/${rm.length}`;
-  document.getElementById("progress-fill").style.width=`${(f/rm.length)*100}%`;
-  document.getElementById("save-btn").textContent=f<rm.length?`Faltam ${rm.length-f} palpites`:`💾 Salvar Rodada ${r}`;
+  document.getElementById("progress-count").textContent=`${f}/${avail.length}`;
+  document.getElementById("progress-fill").style.width=`${avail.length?(f/avail.length)*100:0}%`;
+  document.getElementById("save-btn").textContent=f<avail.length?`Faltam ${avail.length-f} palpites`:`💾 Salvar Rodada ${r}`;
 }
 
 function renderMatches(){
@@ -617,6 +618,12 @@ async function saveRound(){
       : `Rodada ${r} completa e salva! 🔒`;
     toast(msg,"ok");
     renderRoundTabs();
+    // Se todos os disponíveis foram preenchidos, esconde o botão salvar
+    if(filled.length>=total){
+      document.getElementById("save-section").classList.add("hidden");
+      document.getElementById("locked-banner").classList.remove("hidden");
+      document.getElementById("locked-banner").textContent="✅ Todos os palpites disponíveis foram salvos!";
+    }
   }catch(e){toast("Erro ao salvar. Tente novamente.","err");}
   btn.disabled=false; renderProgress();
 }
