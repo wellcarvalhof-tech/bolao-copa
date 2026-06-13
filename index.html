@@ -412,10 +412,18 @@ function matchLocked(matchId){
   const matchStart = MATCH_DATES[matchId];
   if(!matchStart) return false;
   const now = new Date();
-  // Jogo já começou agora → bloqueado para todos
+
+  // Participante antigo: trava pela rodada inteira
+  if(!S.isNewUser){
+    const m = ALL.find(x=>x.id===matchId);
+    if(m && m.r && locked(m.r)) return true;
+    if(now >= matchStart) return true;
+    return false;
+  }
+
+  // Participante novo: trava jogo a jogo pelo horário de início
   if(now >= matchStart) return true;
-  // Participante novo (S.isNewUser=true): bloqueia jogos que já haviam começado no cadastro
-  if(S.isNewUser && S.registeredAt){
+  if(S.registeredAt){
     const reg = new Date(S.registeredAt);
     if(reg >= matchStart) return true;
   }
