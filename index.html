@@ -342,7 +342,7 @@ const OK=SCRIPT_URL!=="COLE_SUA_URL_AQUI";
 const LS_USER="bolao_user", LS_GUESSES="bolao_guesses", LS_CLASS="bolao_class", LS_REG="bolao_reg";
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k))||null;}catch{return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
-let S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null};
+let S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null,isNewUser:false};
 
 // ── API via GET (evita CORS preflight) ────────────────────────────────────────
 async function api(params){
@@ -411,10 +411,13 @@ function matchLocked(matchId){
   const matchStart = MATCH_DATES[matchId];
   if(!matchStart) return false;
   const now = new Date();
-  if(now >= matchStart) return true; // jogo já começou para todo mundo
-  // Para novos participantes: bloqueia jogos que já tinham começado no momento do cadastro
-  const registeredAt = S.registeredAt ? new Date(S.registeredAt) : null;
-  if(registeredAt && registeredAt >= matchStart) return true;
+  // Jogo já começou agora → bloqueado para todos
+  if(now >= matchStart) return true;
+  // Participante novo (S.isNewUser=true): bloqueia jogos que já haviam começado no cadastro
+  if(S.isNewUser && S.registeredAt){
+    const reg = new Date(S.registeredAt);
+    if(reg >= matchStart) return true;
+  }
   return false;
 }
 
@@ -437,15 +440,23 @@ async function doLogin(){
       S.guesses=d.guesses||{};
       // Se usuário novo (sem palpites), registra data de entrada
       const isNew=!d.guesses||Object.keys(d.guesses).length===0;
-      if(isNew) await api({action:"registerEntry",name,registeredAt:new Date().toISOString()});
+      if(isNew){
+        // Novo participante: grava horário de entrada e marca flag
+        const reg=new Date().toISOString();
+        S.registeredAt=reg;
+        S.isNewUser=true;
+        lsSet(LS_REG,reg);
+        lsSet("bolao_isnew","1");
+        await api({action:"registerEntry",name,registeredAt:reg});
+      } else {
+        // Participante antigo: comportamento original (trava por rodada)
+        S.registeredAt=null;
+        S.isNewUser=false;
+        lsSet(LS_REG,null);
+        lsSet("bolao_isnew","0");
+      }
     }
     S.user=name;
-    // Registra data de entrada (só na primeira vez)
-    if(!S.registeredAt){
-      const savedReg=lsGet(LS_REG);
-      S.registeredAt = savedReg || new Date().toISOString();
-      lsSet(LS_REG, S.registeredAt);
-    }
     lsSet(LS_USER,name);
     lsSet(LS_GUESSES,S.guesses);
     document.getElementById("screen-login").classList.add("hidden");
@@ -466,8 +477,8 @@ async function doLogin(){
 
 function logout(){
   lsSet(LS_USER,null); lsSet(LS_GUESSES,null); lsSet(LS_CLASS,null);
-  S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null};
-  lsSet(LS_REG,null);
+  S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null,isNewUser:false};
+  lsSet(LS_REG,null); lsSet("bolao_isnew",null);
   document.getElementById("screen-login").classList.remove("hidden");
   document.getElementById("screen-main").classList.add("hidden");
   document.getElementById("logout-btn").classList.add("hidden");
@@ -846,7 +857,9 @@ async function saveRes(el){
   if(savedUser){
     S.guesses=lsGet(LS_GUESSES)||{};
     S.classGuesses=lsGet(LS_CLASS)||{};
-    S.registeredAt=lsGet(LS_REG)||new Date().toISOString();
+    const savedIsNew=lsGet("bolao_isnew")==="1";
+    S.registeredAt=savedIsNew?(lsGet(LS_REG)||null):null;
+    S.isNewUser=savedIsNew;
     S.user=savedUser;
     try{
       if(OK){
