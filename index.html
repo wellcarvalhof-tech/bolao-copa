@@ -79,6 +79,7 @@ h1 span{color:var(--gold)}
 .score-inp:focus{border-color:var(--gold);color:var(--gold)}
 .score-inp.has-val{border-color:var(--gold-dim);color:var(--gold)}
 .score-inp:disabled{background:var(--surf2);cursor:not-allowed;color:var(--dim)}
+.score-inp[readonly]{background:var(--surf2);cursor:not-allowed;color:var(--dim);pointer-events:none}
 .score-sep{color:var(--dim);font-size:16px}
 .result-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
 .result-actual{font-size:11px;color:var(--dim);font-family:var(--mono)}
@@ -526,14 +527,16 @@ function renderRoundTabs(){
 
 function setRound(r){
   S.round=r; renderRoundTabs(); renderMatches(); renderProgress();
-  document.getElementById("locked-banner").classList.toggle("hidden",!locked(r));
-  document.getElementById("save-section").classList.toggle("hidden",locked(r));
+  const _anyAvail=ALL.filter(m=>m.r===r).some(m=>!matchLocked(m.id));
+  document.getElementById("locked-banner").classList.toggle("hidden",_anyAvail);
+  document.getElementById("save-section").classList.toggle("hidden",!_anyAvail);
 }
 
 function renderProgress(){
-  const r=S.round,lk=locked(r);
-  document.getElementById("progress-wrap").classList.toggle("hidden",lk);
-  if(lk) return;
+  const r=S.round;
+  const _avail=ALL.filter(m=>m.r===r).some(m=>!matchLocked(m.id));
+  document.getElementById("progress-wrap").classList.toggle("hidden",!_avail);
+  if(!_avail) return;
   const rm=ALL.filter(m=>m.r===r);
   const f=rm.filter(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="").length;
   document.getElementById("progress-name").textContent=`Rodada ${r} — ${S.user}`;
@@ -564,9 +567,9 @@ function renderMatches(){
         <div class="match-row">
           <div class="team"><span class="flag">${FLAGS[m.home]||"🏳"}</span><span class="tname">${m.home}</span></div>
           <div class="score-pair">
-            <input class="score-inp ${hv!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${hv}" ${mlk?"disabled":""} oninput="setG('${m.id}','home',this.value)" onchange="renderProgress()">
+            <input class="score-inp ${hv!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${hv}" ${mlk?"disabled":""} ${mlk?"readonly":""} oninput="if(!matchLocked('${m.id}'))setG('${m.id}','home',this.value)" onchange="renderProgress()">
             <span class="score-sep">×</span>
-            <input class="score-inp ${av!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${av}" ${mlk?"disabled":""} oninput="setG('${m.id}','away',this.value)" onchange="renderProgress()">
+            <input class="score-inp ${av!==""?"has-val":""}" type="number" min="0" max="20" inputmode="numeric" value="${av}" ${mlk?"disabled":""} ${mlk?"readonly":""} oninput="if(!matchLocked('${m.id}'))setG('${m.id}','away',this.value)" onchange="renderProgress()">
           </div>
           <div class="team team-away"><span class="tname">${m.away}</span><span class="flag">${FLAGS[m.away]||"🏳"}</span></div>
         </div>${lateBadge}${rr}</div>`;
@@ -575,7 +578,7 @@ function renderMatches(){
   });
   document.getElementById("matches-list").innerHTML=html;
   const anyAvail=ALL.filter(m=>m.r===r).some(m=>!matchLocked(m.id));
-  document.getElementById("locked-banner").classList.toggle("hidden",anyAvail||!lk);
+  document.getElementById("locked-banner").classList.toggle("hidden",anyAvail);
   document.getElementById("save-section").classList.toggle("hidden",!anyAvail);
 }
 
