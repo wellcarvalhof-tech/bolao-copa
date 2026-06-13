@@ -575,18 +575,25 @@ function setG(id,side,val){
 
 async function saveRound(){
   const r=S.round,rm=ALL.filter(m=>m.r===r);
-  const ok=rm.every(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="");
-  if(!ok){toast(`Preencha todos os ${rm.length} jogos antes de salvar.`,"err");return;}
+  // Salva apenas os jogos disponíveis (não bloqueados) que foram preenchidos
+  const available=rm.filter(m=>!matchLocked(m.id));
+  const filled=available.filter(m=>S.guesses[m.id]?.home!==undefined&&S.guesses[m.id].home!==""&&S.guesses[m.id]?.away!==undefined&&S.guesses[m.id].away!=="");
+  if(filled.length===0){toast("Preencha ao menos um palpite antes de salvar.","err");return;}
   const btn=document.getElementById("save-btn");
   btn.disabled=true; btn.textContent="Salvando...";
   try{
     if(OK){
       const rg={};
-      rm.forEach(m=>rg[m.id]=S.guesses[m.id]);
+      // Envia apenas os preenchidos (não força palpites vazios)
+      filled.forEach(m=>rg[m.id]=S.guesses[m.id]);
       await api({action:"saveGuesses",name:S.user,guesses:JSON.stringify(rg),round:r});
     }
     lsSet(LS_GUESSES,S.guesses);
-    toast(`Rodada ${r} salva! 🔒`,"ok");
+    const total=available.length;
+    const msg=filled.length<total
+      ? `${filled.length} de ${total} palpites salvos ✅ — volte para completar os restantes.`
+      : `Rodada ${r} completa e salva! 🔒`;
+    toast(msg,"ok");
     renderRoundTabs();
   }catch(e){toast("Erro ao salvar. Tente novamente.","err");}
   btn.disabled=false; renderProgress();
