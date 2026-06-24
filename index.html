@@ -503,7 +503,7 @@ async function poll(){
     if(d.results) S.results=d.results;
     if(d.participants) S.participants=d.participants;
     renderRanking(); renderResults(); renderProgress(); renderMatches();
-    renderPlist();
+    renderClassGuesses(); renderPlist();
   }catch(e){}
   setTimeout(poll,30000);
 }
