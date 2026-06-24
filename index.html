@@ -334,8 +334,8 @@ const GROUPS=[
 
 const FLAGS={"México":"🇲🇽","África do Sul":"🇿🇦","Coreia do Sul":"🇰🇷","Rep. Tcheca":"🇨🇿","Canadá":"🇨🇦","Bósnia e Herz.":"🇧🇦","Catar":"🇶🇦","Suíça":"🇨🇭","Brasil":"🇧🇷","Marrocos":"🇲🇦","Haiti":"🇭🇹","Escócia":"🏴󠁧󠁢󠁳󠁣󠁴󠁿","Estados Unidos":"🇺🇸","Paraguai":"🇵🇾","Austrália":"🇦🇺","Turquia":"🇹🇷","Alemanha":"🇩🇪","Curaçao":"🇨🇼","Costa do Marfim":"🇨🇮","Equador":"🇪🇨","Holanda":"🇳🇱","Japão":"🇯🇵","Tunísia":"🇹🇳","Suécia":"🇸🇪","Bélgica":"🇧🇪","Egito":"🇪🇬","Irã":"🇮🇷","Nova Zelândia":"🇳🇿","Espanha":"🇪🇸","Cabo Verde":"🇨🇻","Arábia Saudita":"🇸🇦","Uruguai":"🇺🇾","França":"🇫🇷","Senegal":"🇸🇳","Noruega":"🇳🇴","Iraque":"🇮🇶","Argentina":"🇦🇷","Argélia":"🇩🇿","Áustria":"🇦🇹","Jordânia":"🇯🇴","Portugal":"🇵🇹","RD Congo":"🇨🇩","Uzbequistão":"🇺🇿","Colômbia":"🇨🇴","Inglaterra":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Croácia":"🇭🇷","Gana":"🇬🇭","Panamá":"🇵🇦"};
 
-const LOCKS={1:new Date("2026-06-12T16:00:00-03:00"),2:new Date("2026-06-18T16:00:00-03:00"),3:new Date("2026-06-24T16:00:00-03:00")};
-const LOCK_CLASS=new Date("2026-06-18T16:00:00-03:00"); // classificados travam no início da R2
+const LOCKS={1:new Date("2026-06-12T16:00:00-03:00"),2:new Date("2026-06-18T13:00:00-03:00"),3:new Date("2026-06-24T16:00:00-03:00")};
+const LOCK_CLASS=new Date("2026-06-18T13:00:00-03:00"); // classificados travam no início da R2
 const classLocked=()=>new Date()>=LOCK_CLASS;
 const ALL=GROUPS.flatMap(g=>g.matches).filter(m=>m.r!==null);
 const OK=SCRIPT_URL!=="COLE_SUA_URL_AQUI";
@@ -657,11 +657,12 @@ function renderClassGuesses(){
     const opts=teams.map(t=>`<option value="${t}" ${cg.first===t?"selected":""}>${FLAGS[t]||""} ${t}</option>`).join("");
     const opts2=teams.map(t=>`<option value="${t}" ${cg.second===t?"selected":""}>${FLAGS[t]||""} ${t}</option>`).join("");
     const res=S.results;
-    // compute actual classified if all group matches done
+    // Compute actual classified — only consider matches with r!==null (excludes Grupo A R1 games)
     let actualFirst="",actualSecond="";
     const pts_={}; teams.forEach(t=>pts_[t]={pts:0,gd:0,gf:0});
-    const gDone=g.matches.filter(m=>m.r!==null&&res[m.id]&&res[m.id].home!=="");
-    const total=g.matches.filter(m=>m.r!==null).length;
+    const scorableMatches=g.matches.filter(m=>m.r!==null); // only palpitable matches
+    const gDone=scorableMatches.filter(m=>res[m.id]&&res[m.id].home!=="");
+    const total=scorableMatches.length;
     if(gDone.length===total&&total>0){
       gDone.forEach(m=>{
         const h=parseInt(res[m.id].home),a=parseInt(res[m.id].away);
@@ -672,17 +673,13 @@ function renderClassGuesses(){
       const sorted=teams.slice().sort((a,b)=>pts_[b].pts-pts_[a].pts||pts_[b].gd-pts_[a].gd||pts_[b].gf-pts_[a].gf);
       actualFirst=sorted[0];actualSecond=sorted[1];
     }
-    // score badge
+    // Score badge — clean single logic
     let badge="";
     if(actualFirst&&cg.first&&cg.second){
       let p=0;
       if(cg.first===actualFirst&&cg.second===actualSecond) p=6;
-      else if(cg.first===actualFirst||cg.second===actualSecond||(cg.first===actualSecond&&cg.second===actualFirst)) p=(cg.first===actualSecond&&cg.second===actualFirst)?3:1;
-      // refine: both correct wrong order=3, one correct=1
-      if(cg.first===actualFirst&&cg.second===actualSecond) p=6;
       else if(cg.first===actualSecond&&cg.second===actualFirst) p=3;
       else if(cg.first===actualFirst||cg.second===actualSecond||cg.first===actualSecond||cg.second===actualFirst) p=1;
-      else p=0;
       const cl=p===6?"pts-5":p===3?"pts-3":p===1?"pts-2":"pts-0";
       const ic=p===6?"🎯":p===3?"✅":p===1?"〽️":"❌";
       badge=`<span class="pts-badge ${cl}">${ic} ${p} pts</span>`;
