@@ -134,7 +134,10 @@ h1 span{color:var(--gold)}
         <h1>Bolão <span>Copa 2026</span></h1>
         <p class="hdr-sub">48 seleções · 70 jogos pontuáveis · 12 grupos</p>
       </div>
-      <button class="logout-btn hidden" id="logout-btn" onclick="logout()">↩ Sair</button>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="logout-btn hidden" id="refresh-btn" onclick="forceRefresh()" title="Atualizar dados">🔄</button>
+        <button class="logout-btn hidden" id="logout-btn" onclick="logout()">↩ Sair</button>
+      </div>
     </div>
   </div>
 
@@ -471,6 +474,7 @@ async function doLogin(){
     document.getElementById("screen-login").classList.add("hidden");
     document.getElementById("screen-main").classList.remove("hidden");
     document.getElementById("logout-btn").classList.remove("hidden");
+    document.getElementById("refresh-btn").classList.remove("hidden");
     renderAll();
     if(OK) poll();
   }catch(e){
@@ -491,6 +495,7 @@ function logout(){
   document.getElementById("screen-login").classList.remove("hidden");
   document.getElementById("screen-main").classList.add("hidden");
   document.getElementById("logout-btn").classList.add("hidden");
+  document.getElementById("refresh-btn").classList.add("hidden");
   document.getElementById("name-input").value="";
   renderPlist();
 }
@@ -817,6 +822,34 @@ function renderEntryStatus(){
       <div style="margin-top:4px;opacity:.8">Você concorre ao prêmio mas parte com desvantagem de pontuação.</div>
     </div>`;
   }
+}
+
+async function forceRefresh(){
+  const btn=document.getElementById("refresh-btn");
+  btn.textContent="⏳";
+  btn.disabled=true;
+  try{
+    // Clear local class cache and reload from server
+    lsSet(LS_CLASS, null);
+    const d=await api({action:"getPublicData"});
+    if(d.results) S.results=d.results;
+    if(d.participants) S.participants=d.participants;
+    // Reload own guesses and classGuesses from server
+    if(S.user){
+      const u=await api({action:"getGuesses",name:S.user});
+      if(u.guesses) S.guesses={...u.guesses};
+      if(u.classGuesses){
+        S.classGuesses={...u.classGuesses};
+        lsSet(LS_CLASS, S.classGuesses);
+      }
+    }
+    renderAll();
+    toast("Dados atualizados! ✅","ok");
+  }catch(e){
+    toast("Erro ao atualizar.","err");
+  }
+  btn.textContent="🔄";
+  btn.disabled=false;
 }
 
 function toggleAdmin(){
