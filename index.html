@@ -344,6 +344,7 @@ const ALL=GROUPS.flatMap(g=>g.matches).filter(m=>m.r!==null);
 const OK=SCRIPT_URL!=="COLE_SUA_URL_AQUI";
 
 const LS_USER="bolao_user", LS_GUESSES="bolao_guesses", LS_CLASS="bolao_class", LS_REG="bolao_reg";
+try{localStorage.removeItem(LS_CLASS);}catch(e){} // limpa cache de classificados sempre
 function lsGet(k){try{return JSON.parse(localStorage.getItem(k))||null;}catch{return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 let S={user:null,guesses:{},classGuesses:{},results:{},participants:[],round:1,admin:false,registeredAt:null,isNewUser:false};
@@ -450,6 +451,7 @@ async function doLogin(){
     if(OK){
       const d=await api({action:"getGuesses",name});
       S.guesses=d.guesses||{};
+      S.classGuesses=d.classGuesses||{}; // sempre do servidor
       // Se usuário novo (sem palpites), registra data de entrada
       const isNew=!d.guesses||Object.keys(d.guesses).length===0;
       if(isNew){
@@ -727,7 +729,6 @@ async function saveClassGuesses(){
   btn.disabled=true; btn.textContent="Salvando...";
   try{
     if(OK) await api({action:"saveClassGuesses",name:S.user,classGuesses:JSON.stringify(S.classGuesses)});
-    lsSet(LS_CLASS,S.classGuesses);
     toast("Classificados salvos! 🏅","ok");
   }catch(e){toast("Erro ao salvar.","err");}
   btn.disabled=false; btn.textContent="💾 Salvar Classificados";
@@ -838,10 +839,7 @@ async function forceRefresh(){
     if(S.user){
       const u=await api({action:"getGuesses",name:S.user});
       if(u.guesses) S.guesses={...u.guesses};
-      if(u.classGuesses){
-        S.classGuesses={...u.classGuesses};
-        lsSet(LS_CLASS, S.classGuesses);
-      }
+      if(u.classGuesses) S.classGuesses=u.classGuesses; // sempre servidor
     }
     renderAll();
     toast("Dados atualizados! ✅","ok");
@@ -913,7 +911,7 @@ async function saveRes(el){
       if(OK){
         const d=await api({action:"getGuesses",name:savedUser});
         if(d.guesses) S.guesses={...S.guesses,...d.guesses};
-        if(d.classGuesses) S.classGuesses={...S.classGuesses,...d.classGuesses};
+        if(d.classGuesses) S.classGuesses=d.classGuesses; // sempre usa servidor
       }
     }catch(e){}
     document.getElementById("screen-login").classList.add("hidden");
