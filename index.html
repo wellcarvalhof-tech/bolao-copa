@@ -190,6 +190,7 @@ h1 span{color:var(--gold)}
         <span class="rl-item"><span style="color:#1DB954">●</span> 3pts resultado+gol</span>
         <span class="rl-item"><span style="color:#fff">●</span> 2pts resultado</span>
         <span class="rl-item"><span style="color:#666">●</span> 1pt gol parcial</span>
+        <span class="rl-item"><span style="color:#FFD700">●</span> 6/3/1pts classificados</span>
       </div>
       <div class="rank-list" id="rank-list"></div>
     </div>
@@ -636,10 +637,44 @@ async function saveRound(){
 }
 
 function renderRanking(){
+  // Classify actual 1st/2nd per group based on results
+  function getActualClassified(group){
+    const g=GROUPS.find(x=>x.group===group);
+    if(!g) return {first:"",second:""};
+    const scorable=g.matches.filter(m=>m.r!==null);
+    const done=scorable.filter(m=>S.results[m.id]&&S.results[m.id].home!=="");
+    if(done.length<scorable.length) return {first:"",second:""};
+    const pts_={};
+    g.teams.forEach(t=>pts_[t]={pts:0,gd:0,gf:0});
+    done.forEach(m=>{
+      const h=parseInt(S.results[m.id].home),a=parseInt(S.results[m.id].away);
+      if(h>a){pts_[m.home].pts+=3;}else if(h===a){pts_[m.home].pts+=1;pts_[m.away].pts+=1;}else{pts_[m.away].pts+=3;}
+      pts_[m.home].gf+=h;pts_[m.home].gd+=h-a;
+      pts_[m.away].gf+=a;pts_[m.away].gd+=a-h;
+    });
+    const sorted=g.teams.slice().sort((a,b)=>pts_[b].pts-pts_[a].pts||pts_[b].gd-pts_[a].gd||pts_[b].gf-pts_[a].gf);
+    return{first:sorted[0],second:sorted[1]};
+  }
+
   const ranking=S.participants.map(p=>{
-    let pts=0,exact=0,res=0,partial=0,played=0;
+    let pts=0,exact=0,res=0,partial=0,played=0,classPts=0;
+    // Pontos dos jogos
     ALL.forEach(m=>{const s=score(p.guesses?.[m.id],S.results[m.id]);if(s===null)return;played++;pts+=s;if(s===5)exact++;else if(s===3)res++;else if(s===1)partial++;});
-    return{name:p.name,pts,exact,res,partial,played};
+    // Pontos dos classificados
+    const cg=p.classGuesses||{};
+    GROUPS.forEach(g=>{
+      const actual=getActualClassified(g.group);
+      if(!actual.first) return; // grupo ainda não terminou
+      const c=cg[g.group]||{};
+      if(!c.first||!c.second) return;
+      let cp=0;
+      if(c.first===actual.first&&c.second===actual.second) cp=6;
+      else if(c.first===actual.second&&c.second===actual.first) cp=3;
+      else if(c.first===actual.first||c.second===actual.second||c.first===actual.second||c.second===actual.first) cp=1;
+      classPts+=cp;
+      pts+=cp;
+    });
+    return{name:p.name,pts,exact,res,partial,played,classPts};
   }).sort((a,b)=>b.pts-a.pts||b.exact-a.exact);
   const med=["🥇","🥈","🥉"];
   if(!ranking.length){document.getElementById("rank-list").innerHTML=`<div class="empty"><div style="font-size:40px;margin-bottom:12px">📊</div><p>Nenhum participante ainda.</p></div>`;return;}
